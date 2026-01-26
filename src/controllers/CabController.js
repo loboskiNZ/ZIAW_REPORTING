@@ -1,10 +1,9 @@
 const db = require('../config/database');
 const checklistEvaluator = require('../services/ChecklistEvaluator');
+const cabAuthorizationService = require('../services/CabAuthorizationService');
 
-/**
- * Helper to log transition attempts
- */
-async function logTransition(connection, workspaceId, fromStage, toStage, actorType, actorId, decision, rationale) {
+// Internal Helper
+async function _logTransition(connection, workspaceId, fromStage, toStage, actorType, actorId, decision, rationale) {
   await connection.query(
     `INSERT INTO stage_transition_log 
      (workspace_id, from_stage, to_stage, actor_type, actor_id, decision, rationale, created_at)
@@ -13,180 +12,95 @@ async function logTransition(connection, workspaceId, fromStage, toStage, actorT
   );
 }
 
-exports.submitCab = async (req, res) => {
-  const connection = await db.getConnection();
-  try {
-    const workspaceId = parseInt(req.params.workspaceId, 10);
-    if (isNaN(workspaceId)) return res.status(400).json({ error: 'Invalid workspace ID' });
+// Core Logic Reusable Function
+exports.submitCabLogic = async (workspaceId, actorId, rationale) => {
+    // 1. Auth Guard (Reviewer)
+    const isReviewer = await cabAuthorizationService.isReviewer(workspaceId, actorId);
+    if (!isReviewer) {
+      const err = new Error('User is not an authorized reviewer for this workspace');
+      err.code = 'CAB_NOT_REVIEWER';
+      err.status = 403;
+      throw err;
+    }
 
-    const { rationale } = req.body;
-    const actorType = req.headers['x-actor-type']; 
-    const actorId = req.headers['x-actor-id'] || null;
+    const connection = await db.getConnection();
+    try {
+      // 2. Get Workspace Init (No Lock) for Evaluator
+      const [wInit] = await connection.query('SELECT pipeline_stage FROM workspace WHERE id = ?', [workspaceId]);
+      if (wInit.length === 0) {
+        const err = new Error('Workspace not found');
+        err.status = 404;
+        throw err;
+      }
+      const currentStage = wInit[0].pipeline_stage;
 
-    // 1. Auth Guard (HUMAN only)
-    if (!actorType || actorType.toUpperCase() !== 'HUMAN') {
+      // 3. Evaluate Checklists (Pre-Transaction)
+      await checklistEvaluator.evaluate(workspaceId, currentStage);
+
+      // 4. Main Transaction
       await connection.beginTransaction();
-      // Try to get stage for logging
-      const [wRows] = await connection.query('SELECT pipeline_stage FROM workspace WHERE id = ? FOR UPDATE', [workspaceId]);
-      if (wRows.length > 0) {
-        await logTransition(connection, workspaceId, wRows[0].pipeline_stage, wRows[0].pipeline_stage, 'SYSTEM', null, 'FAILED_PRECONDITION', 'CAB_SUBMIT: Missing X-Actor-Type: HUMAN');
-        await connection.commit();
-      } else {
+
+      // Lock Workspace
+      const [wRows] = await connection.query('SELECT * FROM workspace WHERE id = ? FOR UPDATE', [workspaceId]);
+      if (wRows.length === 0) {
         await connection.rollback();
+        const err = new Error('Workspace not found');
+        err.status = 404;
+        throw err;
       }
-      return res.status(403).json({ error: 'Human actor required' });
-    }
+      const workspace = wRows[0];
 
-    // 2. Get Workspace Init (No Lock) for Evaluator
-    const [wInit] = await connection.query('SELECT pipeline_stage FROM workspace WHERE id = ?', [workspaceId]);
-    if (wInit.length === 0) return res.status(404).json({ error: 'Workspace not found' });
-    const currentStage = wInit[0].pipeline_stage;
+      // Update Status & SLA
+      await connection.query(
+        `UPDATE workspace 
+         SET cab_readiness_status = 'PENDING_REVIEW',
+             cab_review_state = 'IN_REVIEW',
+             cab_approval_count = 0,
+             cab_submitted_at = NOW(),
+             cab_expires_at = DATE_ADD(NOW(), INTERVAL 72 HOUR)
+         WHERE id = ?`,
+        [workspaceId]
+      );
 
-    // 3. Evaluate Checklists (Pre-Transaction)
-    await checklistEvaluator.evaluate(workspaceId, currentStage);
+      // Log Success
+      const logRationale = rationale ? `CAB_SUBMIT: ${rationale}` : 'CAB_SUBMIT';
+      await _logTransition(connection, workspaceId, workspace.pipeline_stage, workspace.pipeline_stage, 'HUMAN', actorId, 'SUBMITTED', logRationale);
 
-    // 4. Main Transaction
-    await connection.beginTransaction();
-    
-    // Lock Workspace
-    const [wRows] = await connection.query('SELECT * FROM workspace WHERE id = ? FOR UPDATE', [workspaceId]);
-    if (wRows.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({ error: 'Workspace not found' });
-    }
-    const workspace = wRows[0];
-
-    // Update Status
-    await connection.query('UPDATE workspace SET cab_readiness_status = ? WHERE id = ?', ['PENDING_REVIEW', workspaceId]);
-
-    // Log Success
-    const logRationale = rationale ? `CAB_SUBMIT: ${rationale}` : 'CAB_SUBMIT';
-    // Use SUBMITTED decision for audit trigger compatibility (Rule B)
-    await logTransition(connection, workspaceId, workspace.pipeline_stage, workspace.pipeline_stage, 'HUMAN', actorId, 'SUBMITTED', logRationale);
-
-    await connection.commit();
-
-    return res.json({
-      workspace_id: workspaceId,
-      pipeline_stage: workspace.pipeline_stage,
-      cab_readiness_status: 'PENDING_REVIEW'
-    });
-
-  } catch (err) {
-    if (connection) await connection.rollback();
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) connection.release();
-  }
-};
-
-exports.approveCab = async (req, res) => {
-  const connection = await db.getConnection();
-  try {
-    const workspaceId = parseInt(req.params.workspaceId, 10);
-    if (isNaN(workspaceId)) return res.status(400).json({ error: 'Invalid workspace ID' });
-
-    const { rationale } = req.body;
-    const actorType = req.headers['x-actor-type'];
-    const actorId = req.headers['x-actor-id'] || null;
-
-    // 1. Auth Guard (HUMAN only)
-    if (!actorType || actorType.toUpperCase() !== 'HUMAN') {
-      await connection.beginTransaction();
-       const [wRows] = await connection.query('SELECT pipeline_stage FROM workspace WHERE id = ? FOR UPDATE', [workspaceId]);
-      if (wRows.length > 0) {
-        await logTransition(connection, workspaceId, wRows[0].pipeline_stage, wRows[0].pipeline_stage, 'SYSTEM', null, 'FAILED_PRECONDITION', 'CAB_APPROVE: Missing X-Actor-Type: HUMAN');
-        await connection.commit();
-      } else {
-         await connection.rollback();
-      }
-      return res.status(403).json({ error: 'Human actor required' });
-    }
-
-    // 2. Get Workspace Init (No Lock) for Evaluator
-    const [wInit] = await connection.query('SELECT pipeline_stage FROM workspace WHERE id = ?', [workspaceId]);
-    if (wInit.length === 0) return res.status(404).json({ error: 'Workspace not found' });
-    const stageForEval = wInit[0].pipeline_stage;
-
-    // 3. Evaluate Checklists (Pre-Transaction)
-    await checklistEvaluator.evaluate(workspaceId, stageForEval);
-
-     // 4. Main Transaction
-    await connection.beginTransaction();
-    
-    // Lock Workspace
-    const [wRows] = await connection.query('SELECT * FROM workspace WHERE id = ? FOR UPDATE', [workspaceId]);
-    if (wRows.length === 0) {
-      await connection.rollback();
-      return res.status(404).json({ error: 'Workspace not found' });
-    }
-    const workspace = wRows[0];
-    const currentStage = workspace.pipeline_stage;
-
-    const blockingKeys = [];
-    
-    // A) Check Stage
-    if (currentStage !== 'VERIFY_CAB') {
-      blockingKeys.push('stage_not_verify_cab');
-    }
-
-    // B) Check Required Rules for VERIFY_CAB
-    const [rules] = await connection.query(
-      `SELECT
-         d.rule_key,
-         COALESCE(wcs.status, 'NOT_EVALUATED') AS status
-       FROM stage_checklist_definition d
-       LEFT JOIN workspace_checklist_status wcs
-         ON wcs.checklist_definition_id = d.id
-         AND wcs.workspace_id = ?
-       WHERE d.pipeline_stage = 'VERIFY_CAB'
-         AND d.is_active = 1
-         AND d.is_required = 1`,
-       [workspaceId]
-    );
-
-    for (const r of rules) {
-      if (r.status !== 'PASS' && r.status !== 'WAIVED') {
-        blockingKeys.push(r.rule_key);
-      }
-    }
-
-    if (blockingKeys.length > 0) {
-      // Blocked
-      const logRationale = `CAB_APPROVE blocked: ${blockingKeys.join(', ')}`;
-      await logTransition(connection, workspaceId, currentStage, currentStage, 'HUMAN', actorId, 'FAILED_PRECONDITION', logRationale);
       await connection.commit();
 
-      return res.status(409).json({
+      return {
         workspace_id: workspaceId,
-        pipeline_stage: currentStage,
-        cab_readiness_status: workspace.cab_readiness_status,
-        decision: 'FAILED_PRECONDITION',
-        blocking_rule_keys: blockingKeys
-      });
+        pipeline_stage: workspace.pipeline_stage,
+        cab_readiness_status: 'PENDING_REVIEW'
+      };
+
+    } catch (err) {
+      if (connection) await connection.rollback();
+      throw err;
+    } finally {
+      if (connection) connection.release();
     }
+};
 
-    // Allowed - Approve
-    await connection.query('UPDATE workspace SET cab_readiness_status = ? WHERE id = ?', ['APPROVED', workspaceId]);
+exports.submitCab = async (req, res) => {
+  try {
+    const workspaceId = parseInt(req.params.workspaceId, 10);
+    if (isNaN(workspaceId)) return res.status(400).json({ error: 'Invalid workspace ID' });
 
-    const logRationale = rationale ? `CAB_APPROVE: ${rationale}` : 'CAB_APPROVE';
-    await logTransition(connection, workspaceId, currentStage, currentStage, 'HUMAN', actorId, 'APPROVED', logRationale);
+    const { rationale } = req.body;
+    if (!req.user) return res.status(401).json({ error: 'UNAUTHENTICATED' });
+    const actorId = req.user.id;
 
-    await connection.commit();
-
-    return res.json({
-      workspace_id: workspaceId,
-      pipeline_stage: 'VERIFY_CAB',
-      cab_readiness_status: 'APPROVED',
-      decision: 'APPROVED'
-    });
+    const result = await exports.submitCabLogic(workspaceId, actorId, rationale);
+    return res.json(result);
 
   } catch (err) {
-    if (connection) await connection.rollback();
+    if (err.status) {
+      return res.status(err.status).json({ error: err.code || 'ERROR', message: err.message });
+    }
     console.error(err);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) connection.release();
   }
 };
+
+

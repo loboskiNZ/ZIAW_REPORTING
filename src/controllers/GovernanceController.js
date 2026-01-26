@@ -10,39 +10,11 @@ exports.transitionStage = async (req, res) => {
     }
 
     const { to_stage, rationale } = req.body;
-    const actorType = req.headers['x-actor-type']; // Case-insensitive header access
-    const actorId = req.headers['x-actor-id'] || null;
-
-    // 1. Auth Guard
-    if (!actorType || actorType.toUpperCase() !== 'HUMAN') {
-      // Log failed precondition attempt if we can identify workspace
-      // Actually, spec says "return 403 and log FAILED_PRECONDITION ... with actor_type='SYSTEM'"
-      // We'll try to log it if workspace exists, but basic auth fail might just return 403.
-      // Let's check workspace existence first inside transaction for consistency? 
-      // User spec says: "If actor type is missing... return 403 and log..."
-      // We will do this carefully.
-      
-      // Let's start transaction to be safe for logging
-      await connection.beginTransaction();
-      
-      // We need from_stage to log properly, so we have to fetch workspace anyway.
-      const [wRows] = await connection.query('SELECT * FROM workspace WHERE id = ? FOR UPDATE', [workspaceId]);
-      
-      if (wRows.length > 0) {
-        const workspace = wRows[0];
-        await connection.query(
-          `INSERT INTO stage_transition_log 
-           (workspace_id, from_stage, to_stage, actor_type, actor_id, decision, rationale, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [workspaceId, workspace.pipeline_stage, to_stage || 'UNKNOWN', 'SYSTEM', null, 'FAILED_PRECONDITION', 'Missing X-Actor-Type: HUMAN header']
-        );
-        await connection.commit();
-      } else {
-        await connection.rollback(); // No workspace to log against
-      }
-
-      return res.status(403).json({ error: 'Human actor required' });
+    if (!req.user) {
+      return res.status(401).json({ error: 'UNAUTHENTICATED' });
     }
+    const actorId = req.user.id;
+    const actorType = 'HUMAN'; // Entra users are treated as HUMAN actors for governance logs
 
     // 2. Get Workspace Initial Info (No Lock) to run evaluator
     const [wInit] = await connection.query('SELECT pipeline_stage FROM workspace WHERE id = ?', [workspaceId]);

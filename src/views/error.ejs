@@ -1,0 +1,13 @@
+<%- include('header') %>
+
+<div style="text-align: center; margin-top: 50px;">
+  <h1 style="color: #dc3545; font-size: 48px;">Error <%= status %></h1>
+  <h2 style="color: #555;"><%= code %></h2>
+  <p style="font-size: 18px;"><%= message %></p>
+  
+  <br>
+  <a href="javascript:history.back()" class="btn btn-secondary">Go Back</a>
+  <a href="/ui/workspaces" class="btn">Return to Workspaces</a>
+</div>
+
+<%- include('footer') %>

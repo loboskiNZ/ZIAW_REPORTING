@@ -1,0 +1,41 @@
+<%- include('header') %>
+
+<h1>Workspaces</h1>
+
+<div style="overflow-x: auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Stage</th>
+        <th>Readiness</th>
+        <th>Review State</th>
+        <th>Approvals</th>
+        <th>Expires At</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% workspaces.forEach(function(w) { %>
+        <tr>
+          <td><%= w.id %></td>
+          <td><strong><%= w.name %></strong></td>
+          <td><%= w.pipeline_stage %></td>
+          <td><span class="badge badge-<%= w.cab_readiness_status %>"><%= w.cab_readiness_status %></span></td>
+          <td><span class="badge badge-<%= w.cab_review_state %>"><%= w.cab_review_state %></span></td>
+          <td><%= w.cab_approval_count %> / <%= w.cab_required_approvals %></td>
+          <td><%= w.cab_expires_at ? new Date(w.cab_expires_at).toLocaleString() : '-' %></td>
+          <td>
+            <a href="/ui/workspaces/<%= w.id %>" class="btn btn-sm">Open</a>
+          </td>
+        </tr>
+      <% }); %>
+      <% if (workspaces.length === 0) { %>
+        <tr><td colspan="8" style="text-align: center;">No workspaces found.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('footer') %>

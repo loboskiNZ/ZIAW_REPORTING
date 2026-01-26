@@ -1,0 +1,64 @@
+<%- include('header') %>
+
+<h1>Manage Reviewers</h1>
+<p>Workspace ID: <%= workspaceId %></p>
+
+<div class="card">
+  <h3>Add Reviewer</h3>
+  <form action="/ui/workspaces/<%= workspaceId %>/reviewers/add" method="POST">
+    <div style="display: flex; gap: 10px; align-items: flex-end;">
+      <div style="flex: 1;">
+        <label>Reviewer ID (Email/OID)</label>
+        <input type="text" name="reviewer_id" required placeholder="e.g. alice@example.com">
+      </div>
+      <div style="width: 150px;">
+        <label>Role</label>
+        <select name="role" style="width: 100%; padding: 8px;">
+          <option value="MEMBER">MEMBER</option>
+          <option value="CHAIR">CHAIR</option>
+        </select>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-success">Add</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Current Reviewers</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Reviewer ID</th>
+        <th>Role</th>
+        <th>Added At</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% reviewers.forEach(function(r) { %>
+        <tr>
+          <td><%= r.reviewer_id %></td>
+          <td><%= r.role %></td>
+          <td><%= new Date(r.created_at).toLocaleString() %></td>
+          <td>
+            <form action="/ui/workspaces/<%= workspaceId %>/reviewers/remove" method="POST" style="display: inline;">
+              <input type="hidden" name="reviewer_id" value="<%= r.reviewer_id %>">
+              <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?');">Remove</button>
+            </form>
+          </td>
+        </tr>
+      <% }); %>
+      <% if (reviewers.length === 0) { %>
+        <tr><td colspan="4">No reviewers found.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top: 20px;">
+  <a href="/ui/workspaces/<%= workspaceId %>" class="btn btn-secondary">Back to Workspace</a>
+</div>
+
+<%- include('footer') %>

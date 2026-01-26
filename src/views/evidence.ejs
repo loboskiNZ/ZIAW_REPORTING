@@ -1,0 +1,60 @@
+<%- include('header') %>
+
+<h1>Evidence for Audit Event #<%= auditId %></h1>
+<p>Workspace ID: <%= workspaceId %></p>
+
+<div class="card">
+  <h3>Attach New Evidence</h3>
+  <form action="/ui/workspaces/<%= workspaceId %>/evidence/add" method="POST">
+    <input type="hidden" name="audit_id" value="<%= auditId %>">
+    
+    <div class="form-group">
+      <label>Evidence Type</label>
+      <select name="evidence_type">
+        <option value="NOTE">NOTE (Text Comment)</option>
+        <option value="LINK">LINK (URL)</option>
+        <option value="FILE">FILE (Reference/Path)</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>Evidence Value (Description, URL, or Path)</label>
+      <textarea name="evidence_value" rows="3" required></textarea>
+    </div>
+    
+    <button type="submit" class="btn btn-success">Attach Evidence</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Attached Evidence</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Value</th>
+        <th>Attached By</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% evidence.forEach(function(e) { %>
+        <tr>
+          <td><span class="evidence-type"><%= e.evidence_type %></span></td>
+          <td style="white-space: pre-wrap;"><%= e.evidence_value %></td>
+          <td><%= e.actor %></td>
+          <td><%= new Date(e.created_at).toLocaleString() %></td>
+        </tr>
+      <% }); %>
+      <% if (evidence.length === 0) { %>
+        <tr><td colspan="4">No evidence attached.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top: 20px;">
+  <a href="/ui/workspaces/<%= workspaceId %>" class="btn btn-secondary">Back to Workspace</a>
+</div>
+
+<%- include('footer') %>

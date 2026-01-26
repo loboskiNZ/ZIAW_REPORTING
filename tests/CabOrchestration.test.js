@@ -48,6 +48,11 @@ async function runTests() {
      const connection = await db.getConnection();
      
      // Ensure Workspace 1 exists and is in VERIFY_CAB to test transitions
+     await connection.query('DELETE FROM cab_review_evidence WHERE workspace_id = 1');
+     await connection.query('DELETE FROM cab_reviewers WHERE workspace_id = 1');
+     await connection.query('DELETE FROM workspace_checklist_status WHERE workspace_id = 1');
+     await connection.query('DELETE FROM stage_transition_log WHERE workspace_id = 1');
+     await connection.query('DELETE FROM workspace_snapshot WHERE workspace_id = 1');
      await connection.query('DELETE FROM workspace WHERE id = 1');
      await connection.query(`INSERT INTO workspace (id, name, pipeline_stage, cab_readiness_status) VALUES (1, 'Test WS', 'VERIFY_CAB', 'NOT_READY')`);
      

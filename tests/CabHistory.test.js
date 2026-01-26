@@ -28,13 +28,18 @@ async function runTests() {
   try {
     // Setup Workspace 6
     await connection.query('DELETE FROM workspace WHERE id = 6');
-    await connection.query(`INSERT INTO workspace (id, name, pipeline_stage, cab_readiness_status) VALUES (6, 'HistoryWS', 'VERIFY_CAB', 'NOT_READY')`);
+    await connection.query(`INSERT INTO workspace (id, name, pipeline_stage, cab_readiness_status) VALUES (6, 'HistoryWS', 'VERIFY_CAB', 'PENDING_REVIEW')`);
     
     // Insert some logs
+    // Note: Triggers enforce validity. APPROVED action requires status PENDING_REVIEW (or APPROVED).
     await connection.query(
       `INSERT INTO stage_transition_log (workspace_id, from_stage, to_stage, actor_type, decision, rationale, created_at)
        VALUES 
-       (6, 'VERIFY_CAB', 'VERIFY_CAB', 'SYSTEM', 'FAILED_PRECONDITION', 'Test 1', '2023-01-01 10:00:00'),
+       (6, 'VERIFY_CAB', 'VERIFY_CAB', 'SYSTEM', 'FAILED_PRECONDITION', 'Test 1', '2023-01-01 10:00:00')`
+    );
+     await connection.query(
+      `INSERT INTO stage_transition_log (workspace_id, from_stage, to_stage, actor_type, decision, rationale, created_at)
+       VALUES 
        (6, 'VERIFY_CAB', 'RELEASE', 'HUMAN', 'APPROVED', 'Test 2', '2023-01-01 11:00:00')`
     );
 
