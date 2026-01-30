@@ -1,0 +1,84 @@
+{
+    "CURRICULUM_MODULE": [
+        "DLE (Moodle)",
+        "Leganto",
+        "PebblePad",
+        "Salesforce",
+        "SITS Vision (Target)",
+        "Syllabus Plus",
+        "Website Integration"
+    ],
+    "CURRICULUM_PROGRAMME": [
+        "DLE (Moodle)",
+        "Salesforce",
+        "SiSO - Loan Equipment Service",
+        "SITS Vision (Target)",
+        "Syllabus Plus",
+        "Website Integration"
+    ],
+    "FINANCE": [
+        "SITS Vision (Target)",
+        "Unit4 (P2P; Stu3)"
+    ],
+    "REFERENCE_DATA": [
+        "SITS Vision (Target)",
+        "Website Integration"
+    ],
+    "STAFF": [
+        "Active Directory",
+        "Personiq",
+        "Salesforce",
+        "SITS Vision (Target)",
+        "StarRez"
+    ],
+    "STUDENT": [
+        "ARC–POPPI",
+        "MIM",
+        "MSL - Student Union",
+        "Personiq",
+        "RIS",
+        "Salesforce",
+        "Salto",
+        "SiSO - Loan Equipment Service",
+        "SITS Vision (Target)",
+        "StarRez",
+        "Target Connect"
+    ],
+    "STUDENT_ENROLMENT_MODULE": [
+        "DLE (Moodle)",
+        "MIM",
+        "PebblePad",
+        "Salesforce",
+        "SITS Vision (Target)",
+        "Syllabus Plus"
+    ],
+    "STUDENT_ENROLMENT_PROGRAMME": [
+        "ALMA users",
+        "ARC–POPPI",
+        "DLE (Moodle)",
+        "MIM",
+        "MSL - Student Union",
+        "Personiq",
+        "RIS",
+        "Salesforce",
+        "Salto",
+        "SiSO - Loan Equipment Service",
+        "SITS Vision (Target)",
+        "StarRez",
+        "Syllabus Plus",
+        "Target Connect"
+    ],
+    "STUDENT_IDENTITY": [
+        "Active Directory",
+        "SITS Vision (Target)"
+    ],
+    "STUDENT_PHOTOS": [
+        "Personiq",
+        "Salesforce",
+        "SITS Vision (Target)",
+        "StarRez"
+    ],
+    "UNIT_E_LEGACY_READ": [
+        "SITS Vision (Target)"
+    ]
+}
